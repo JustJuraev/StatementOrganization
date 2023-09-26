@@ -57,6 +57,7 @@ func Login(page http.ResponseWriter, r *http.Request) {
 	}
 	tmpl.ExecuteTemplate(page, "login", nil)
 }
+
 func LoginPost(page http.ResponseWriter, r *http.Request) {
 	login := r.FormValue("login")
 	password := r.FormValue("password")
@@ -208,6 +209,146 @@ func CloseStatementPost(page http.ResponseWriter, r *http.Request) {
 	http.Redirect(page, r, "/statements/"+orgid, http.StatusSeeOther)
 }
 
+func RejectStatement(page http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	connStr := "user=postgres password=123456 dbname=mygovdb sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer db.Close()
+
+	row := db.QueryRow("SELECT * FROM public.statements WHERE id=$1", id)
+	st := StatementStruct{}
+	err2 := row.Scan(&st.Id, &st.Name, &st.LastName, &st.Date, &st.Status, &st.Statement, &st.PassportSeries, &st.Time, &st.UserId, &st.OrgId)
+	if err2 != nil {
+		panic(err2)
+	}
+
+	tmpl, err := template.ParseFiles("html_files/rejectform.html")
+	if err != nil {
+		panic(err)
+	}
+	tmpl.ExecuteTemplate(page, "rejectform", st)
+}
+
+func RejectStatementPost(page http.ResponseWriter, r *http.Request) {
+	uid := r.FormValue("uid")
+	sid := r.FormValue("sid")
+	orgid := r.FormValue("orgid")
+	text := r.FormValue("text")
+
+	file, handler, err := r.FormFile("myFile")
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer file.Close()
+
+	dst, _ := os.Create(filepath.Join("temp_files", handler.Filename))
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(page, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	connStr := "user=postgres password=123456 dbname=mygovdb sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer db.Close()
+
+	_, err3 := db.Exec("INSERT INTO public.orgstatements (statementid, text, file) VALUES ($1, $2, $3)", sid, text, handler.Filename)
+
+	if err3 != nil {
+		panic(err3)
+	}
+
+	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action) VALUES ($1, $2, $3, $4)", uid, sid, time.Now(), "reject from org")
+
+	if err4 != nil {
+		panic(err4)
+	}
+
+	_, err5 := db.Exec("UPDATE public.statements SET status=$1 WHERE id=$2", 220, sid)
+	if err5 != nil {
+		panic(err5)
+	}
+
+	http.Redirect(page, r, "/statements/"+orgid, http.StatusSeeOther)
+}
+
+func SendBackStatement(page http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	connStr := "user=postgres password=123456 dbname=mygovdb sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer db.Close()
+
+	row := db.QueryRow("SELECT * FROM public.statements WHERE id=$1", id)
+	st := StatementStruct{}
+	err2 := row.Scan(&st.Id, &st.Name, &st.LastName, &st.Date, &st.Status, &st.Statement, &st.PassportSeries, &st.Time, &st.UserId, &st.OrgId)
+	if err2 != nil {
+		panic(err2)
+	}
+
+	tmpl, err := template.ParseFiles("html_files/sendbackst.html")
+	if err != nil {
+		panic(err)
+	}
+	tmpl.ExecuteTemplate(page, "sendbackst", st)
+}
+
+func SendBackStatementPost(page http.ResponseWriter, r *http.Request) {
+	uid := r.FormValue("uid")
+	sid := r.FormValue("sid")
+	orgid := r.FormValue("orgid")
+	text := r.FormValue("text")
+
+	connStr := "user=postgres password=123456 dbname=mygovdb sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer db.Close()
+
+	_, err3 := db.Exec("INSERT INTO public.orgstatements (statementid, text) VALUES ($1, $2)", sid, text)
+
+	if err3 != nil {
+		panic(err3)
+	}
+
+	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action) VALUES ($1, $2, $3, $4)", uid, sid, time.Now(), "send back from org")
+
+	if err4 != nil {
+		panic(err4)
+	}
+
+	_, err5 := db.Exec("UPDATE public.statements SET status=$1 WHERE id=$2", 250, sid)
+	if err5 != nil {
+		panic(err5)
+	}
+
+	http.Redirect(page, r, "/statements/"+orgid, http.StatusSeeOther)
+}
+
 func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router := mux.NewRouter()
@@ -217,5 +358,9 @@ func main() {
 	router.HandleFunc("/statements/{id:[0-9]+}", Statements)
 	router.HandleFunc("/closest/{id:[0-9]+}", CloseStatement)
 	router.HandleFunc("/closing_statement", CloseStatementPost)
+	router.HandleFunc("/rejectst/{id:[0-9]+}", RejectStatement)
+	router.HandleFunc("/rejecting_statement", RejectStatementPost)
+	router.HandleFunc("/sendbackst/{id:[0-9]+}", SendBackStatement)
+	router.HandleFunc("/sendbackst_statement", SendBackStatementPost)
 	http.ListenAndServe(":8084", nil)
 }
