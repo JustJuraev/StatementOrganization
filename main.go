@@ -195,7 +195,7 @@ func CloseStatementPost(page http.ResponseWriter, r *http.Request) {
 		panic(err3)
 	}
 
-	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action) VALUES ($1, $2, $3, $4)", uid, sid, time.Now(), "close")
+	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action, orgid) VALUES ($1, $2, $3, $4, $5)", uid, sid, time.Now(), "close", orgid)
 
 	if err4 != nil {
 		panic(err4)
@@ -272,7 +272,7 @@ func RejectStatementPost(page http.ResponseWriter, r *http.Request) {
 		panic(err3)
 	}
 
-	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action) VALUES ($1, $2, $3, $4)", uid, sid, time.Now(), "reject from org")
+	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action, orgid) VALUES ($1, $2, $3, $4, $5)", uid, sid, time.Now(), "reject from org", orgid)
 
 	if err4 != nil {
 		panic(err4)
@@ -335,7 +335,7 @@ func SendBackStatementPost(page http.ResponseWriter, r *http.Request) {
 		panic(err3)
 	}
 
-	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action) VALUES ($1, $2, $3, $4)", uid, sid, time.Now(), "send back from org")
+	_, err4 := db.Exec("INSERT INTO public.statementshistory (userid, statementid, date, action, orgid) VALUES ($1, $2, $3, $4, $5)", uid, sid, time.Now(), "send back from org", orgid)
 
 	if err4 != nil {
 		panic(err4)
@@ -348,6 +348,8 @@ func SendBackStatementPost(page http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(page, r, "/statements/"+orgid, http.StatusSeeOther)
 }
+
+//TODO: 1. Добавить OrgId в StatementHistory, 2. Добавить историю в заявлениях, 3. добавить раздел завершеные заявления
 
 func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
