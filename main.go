@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/md5"
 	"database/sql"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,6 +49,7 @@ type OrgStatement struct {
 }
 
 var statements = []StatementStruct{}
+var users = []User{}
 
 func Login(page http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFiles("html_files/login.html")
@@ -58,40 +59,23 @@ func Login(page http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(page, "login", nil)
 }
 
-func LoginPost(page http.ResponseWriter, r *http.Request) {
-	login := r.FormValue("login")
-	password := r.FormValue("password")
-	if login == "" || password == "" {
-		tmpl, err := template.ParseFiles("html_files/login.html")
-		if err != nil {
-			panic(err)
-		}
-		tmpl.ExecuteTemplate(page, "login", "Все поля должны быть заполнеными")
-	}
-	connStr := "user=postgres password=123456 dbname=mygovdb sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
+func HandleOAuthRequest(page http.ResponseWriter, r *http.Request) {
+	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
-	hash := md5.Sum([]byte(password))
-	hashedPass := hex.EncodeToString(hash[:])
-	res := db.QueryRow("SELECT * FROM public.users WHERE login = $1 AND password = $2", login, hashedPass)
-	user := User{}
-	err3 := res.Scan(&user.Id, &user.Login, &user.Password, &user.Name, &user.LastName, &user.Role, &user.OrgId)
-	if err3 != nil {
-		tmpl, err2 := template.ParseFiles("html_files/login.html")
-		if err2 != nil {
-			panic(err2)
-		}
-		tmpl.ExecuteTemplate(page, "login", "Неправильный логин или пароль")
-	} else {
 
-		if user.Role == 2 {
-			s2 := strconv.Itoa(user.OrgId)
-			http.Redirect(page, r, "/statements/"+s2, http.StatusSeeOther)
-		}
+	deserializedUser := User{}
+	err = json.Unmarshal([]byte(string(b)), &deserializedUser)
+
+	users = append(users, deserializedUser)
+	if users[0].Role == 2 {
+		s2 := strconv.Itoa(users[0].OrgId)
+		http.Redirect(page, r, "/statements/"+s2, http.StatusSeeOther)
+	} else {
+		http.Redirect(page, r, "/", http.StatusSeeOther)
 	}
+
 }
 
 func Statements(page http.ResponseWriter, r *http.Request) {
@@ -356,7 +340,7 @@ func main() {
 	router := mux.NewRouter()
 	http.Handle("/", router)
 	router.HandleFunc("/", Login)
-	router.HandleFunc("/login_check", LoginPost)
+	router.HandleFunc("/handleouathcheck", HandleOAuthRequest)
 	router.HandleFunc("/statements/{id:[0-9]+}", Statements)
 	router.HandleFunc("/closest/{id:[0-9]+}", CloseStatement)
 	router.HandleFunc("/closing_statement", CloseStatementPost)
